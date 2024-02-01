@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "luban_core",
+    "sparkle_algo",
+    "luban_manager",
+    "sparkle_ffi",
+    "sparkle_test",
+]

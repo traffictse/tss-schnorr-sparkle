@@ -1,0 +1,15 @@
+[package]
+name = "luban_core"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[dependencies.xuanmi_base_support]
+# git = "ssh://git@github.com/taiyi-research-institute/xuanmi_base_support"
+git = "https://github.com/taiyi-research-institute/xuanmi_base_support"
+rev = "731cb963ba00cbc1adf26645eae8a92f3733c76b"

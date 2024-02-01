@@ -1,0 +1,7 @@
+{
+    "Keygen": {
+        "server": "http://127.0.0.1:8000",
+        "tr_uuid": "2",
+        "tn_config": [1, 3]
+    }
+}

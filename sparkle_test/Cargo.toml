@@ -1,0 +1,16 @@
+[package]
+name = "sparkle_test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.sparkle_algo]
+path = "../sparkle_algo"
+
+[dependencies.xuanmi_base_support]
+# git = "ssh://git@github.com/taiyi-research-institute/xuanmi_base_support"
+git = "https://github.com/taiyi-research-institute/xuanmi_base_support"
+rev = "731cb963ba00cbc1adf26645eae8a92f3733c76b"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]

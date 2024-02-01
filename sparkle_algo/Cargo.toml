@@ -1,0 +1,36 @@
+[package]
+name = "sparkle_algo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies.luban_core]
+path = "../luban_core"
+
+[dependencies.bip32]
+path = "deps/bip32-Ed25519-0.5.1"
+
+[dependencies.xuanmi_base_support]
+git = "https://github.com/taiyi-research-institute/xuanmi_base_support"
+rev = "731cb963ba00cbc1adf26645eae8a92f3733c76b"
+
+#region External Dependencies
+
+[dependencies]
+rocket = { version = "0.5.0-rc.1", features = ["json"] }
+thiserror = "1.0"
+anyhow = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+curve25519-dalek = { version = "3", features = ["serde"] }
+rand = "0.7"
+rand_core = "0.6"
+sha2 = "0.9"
+sha3 = "0.10.8"
+reqwest = { version = "0.10.1", default-features = false, features = ["native-tls", "json", "blocking"] }
+uuid = { version = "0.8", features = ["v4"] }
+aes-gcm = { version = "0.9", features = ["std"] }
+hex = "0.4"
+zeroize = { version = "1", features = ["zeroize_derive"] }
+hmac = { version = "0.11.0", features = ["std"] }
+
+#endregion

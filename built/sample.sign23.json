@@ -1,0 +1,8 @@
+{
+    "Sign": {
+        "server": "http://127.0.0.1:8000",
+        "tr_uuid": "2",
+        "tcn_config": [1, 2, 3],
+        "msg_hashed": "bytes_hex:e8c49db428f3390d3304317adad89b2ee97607e2"
+    }
+}
