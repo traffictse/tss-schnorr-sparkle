@@ -1,19 +1,14 @@
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
+use luban_core::MpcClientMessenger;
 use rand::rngs::OsRng;
 use std::collections::HashMap;
-use luban_core::MpcClientMessenger;
 use xuanmi_base_support::*;
 
-use super::party_i::*;
-// use super::party_i::{Signature, SigningResponse};
-
 use super::data_structure::KeyStore;
-use crate::{
-    InvalidConfigs, InvalidKeystore, InvalidMessage, InvalidSignature, SignFailed, SignUpFailed,
-    SignatureAggregateFailed, SigningComGenFailed,
-};
+use super::party_i::*;
+use crate::exn;
 
 pub fn algo_sign(
     server: &str,
@@ -27,7 +22,10 @@ pub fn algo_sign(
             String::from("The sign algorithm **assumes** its input message has been hashed.\n");
         msg += &format!("However, the algorithm received a message with length = {}, indicating the message is probably un-hashed.\n", msg_hashed.len());
         msg += "Did the caller forget to hash the message?";
-        throw!(name = InvalidMessage, ctx = &msg);
+        throw!(
+            name = exn::ConfigException,
+            ctx = &("Message=\"".to_owned() + &msg + "\" is invalid")
+        );
     }
 
     let (threshold, parties, share_count) = (tcn_config[0], tcn_config[1], tcn_config[2]);
@@ -41,7 +39,7 @@ pub fn algo_sign(
     let cond = threshold + 1 <= parties && parties <= share_count;
     if !cond {
         throw!(
-            name = InvalidConfigs,
+            name = exn::ConfigException,
             ctx = &format!(
                 "t/c/n config should satisfy t<c<=n.\n\tHowever, {}/{}/{} was provided",
                 threshold, parties, share_count
@@ -53,9 +51,9 @@ pub fn algo_sign(
     let messenger =
         MpcClientMessenger::signup(server, "sign", tr_uuid, threshold, parties, share_count)
             .catch(
-                SignUpFailed,
+                exn::SignUpException,
                 &format!(
-                    "Cannot sign up for key geneation with server={}, tr_uuid={}.",
+                    "Cannot sign up for signing with server={}, tr_uuid={}.",
                     server, tr_uuid
                 ),
             )?;
@@ -63,11 +61,6 @@ pub fn algo_sign(
     println!(
         "MPC Server {} designated this party with\n\tparty_id={}, tr_uuid={}",
         server,
-        party_num_int,
-        messenger.uuid()
-    );
-    let exception_location = &format!(
-        " (at party_id={}, tr_uuid={}).",
         party_num_int,
         messenger.uuid()
     );
@@ -84,12 +77,21 @@ pub fn algo_sign(
         .collect::<Result<Vec<u16>, _>>()?;
     if signers_vec.contains(&party_id) {
         throw!(
-            name = InvalidKeystore,
-            ctx = &(format!("Duplicated keyshare") + exception_location)
+            name = exn::ConfigException,
+            ctx = &(format!("Duplicate keystore in signing"))
+        );
+    }
+    if valid_com_vec
+        .iter()
+        .find(|comm| comm.index == party_id)
+        .is_none()
+    {
+        throw!(
+            name = exn::ConfigException,
+            ctx = &(format!("Keystore not in the list of valid parties from KeyGen"))
         );
     }
     signers_vec.insert(party_num_int as usize - 1, party_id);
-    // need to check if a signer is not in the list of valid_com_vec???
     println!("Finished sign round {round}");
     round += 1;
     // #endregion
@@ -99,8 +101,8 @@ pub fn algo_sign(
         match signing_key.sign_sample_nonce_and_commit(&mut rng, msg_hashed, &signers_vec) {
             Ok(_ok) => _ok,
             Err(_) => throw!(
-                name = SigningComGenFailed,
-                ctx = &(("Failed to generate signing commitments").to_owned() + exception_location)
+                name = exn::CommitmentException,
+                ctx = &format!("Failed to generate commitments to the local nonce")
             ),
         };
     messenger.send_broadcast(party_num_int, round, &obj_to_json(&com)?)?;
@@ -136,9 +138,8 @@ pub fn algo_sign(
     ) {
         Ok(_ok) => _ok,
         Err(err) => throw!(
-            name = SignFailed,
-            ctx = &(format!("Failed to sign the message, particularly \"{}\"", err)
-                + exception_location)
+            name = exn::SignatureException,
+            ctx = &(format!("Failed to sign with secret share, particularly \"{}\"", err))
         ),
     };
     messenger.send_broadcast(party_num_int, round, &obj_to_json(&response_i)?)?;
@@ -166,17 +167,17 @@ pub fn algo_sign(
     ) {
         Ok(_ok) => _ok,
         Err(err) => throw!(
-            name = SignatureAggregateFailed,
+            name = exn::AggregationException,
             ctx = &(format!(
                 "Failed to aggregate signature shares, particularly \"{}\"",
                 err
-            ) + exception_location)
+            ))
         ),
     };
-    if !validate(&group_sig, &signing_key.group_public).is_ok() {
+    if !group_sig.validate(&signing_key.group_public).is_ok() {
         throw!(
-            name = InvalidSignature,
-            ctx = &(format!("Invalid Schnorr signature") + exception_location)
+            name = exn::SignatureException,
+            ctx = &(format!("Invalid aggregated signature"))
         );
     }
     // #endregion

@@ -2,169 +2,29 @@
 
 use curve25519_dalek::{constants, ristretto::RistrettoPoint, scalar::Scalar, traits::Identity};
 use rand::{CryptoRng, RngCore};
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::iter::zip;
-use zeroize::Zeroize;
-
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256}; // for commitments
 use sha3::{Digest as OtherDigest, Sha3_256}; // for signing
+use std::{collections::HashMap, convert::TryInto, iter::zip};
+use zeroize::Zeroize;
 
-// #[derive(Debug)]
-// enum Value<'a> {
-//     U16(&'a u16),
-//     Str(&'a str),
-//     Point(&'a RistrettoPoint),
-//     Scalar(&'a Scalar),
-//     Vec(&'a Vec<u16>)
-//     // Add more variants for other types as needed
-// }
+use crate::exn;
+use xuanmi_base_support::*;
 
-// pub trait ToBytes {
-//     fn to_bytes(&self) -> &[u8];
-// }
-
-// impl ToBytes for Value<'_> {
-//     fn to_bytes(&self) -> &[u8] {
-//         match self {
-//             Value::U16(val) => val.to_be_bytes(),
-//             Value::Str(val) => val.bytes(),
-//             Value::Point(val) => val.compress().to_bytes(),
-//             Value::Scalar(val) => val.as_bytes(),
-//             Value::Vec(val) => unsafe {
-//                 core::slice::from_raw_parts(
-//                     val.as_ptr() as *const u8,
-//                     val.len() * core::mem::size_of::<u16>(),
-//                 )
-//             },
-//             // Add more cases for other types as needed
-//         }
-//     }
-// }
-
-// impl<T: ToBytes + ?Sized> ToBytes for &T {
-//     fn to_bytes(&self) -> &[u8] {
-//         (*self).to_bytes()
-//     }
-// }
-
-// impl ToBytes for RistrettoPoint {
-//     fn to_bytes(&self) -> &[u8] {
-//         &self.compress().to_bytes()
-//     }
-// }
-
-// impl ToBytes for Scalar {
-//     fn to_bytes(&self) -> &[u8] {
-//         self.as_bytes()
-//     }
-// }
-
-// impl ToBytes for u16 {
-//     fn to_bytes(&self) -> &[u8] {
-//         &self.to_be_bytes()
-//     }
-// }
-
-// impl ToBytes for [u16] {
-//     fn to_bytes(&self) -> &[u8] {
-//         unsafe {
-//             core::slice::from_raw_parts(
-//                 self.as_ptr() as *const u8,
-//                 self.len() * core::mem::size_of::<u16>(),
-//             )
-//         }
-//     }
-// }
-
-// impl ToBytes for &Vec<u16> {
-//     fn to_bytes(&self) -> &[u8] {
-//         unsafe {
-//             core::slice::from_raw_parts(
-//                 self.as_ptr() as *const u8,
-//                 self.len() * core::mem::size_of::<u16>(),
-//             )
-//         }
-//     }
-// }
-
-// impl ToBytes for &str {
-//     fn to_bytes(&self) -> &[u8] {
-//         self.as_bytes()
-//     }
-// }
-
-// impl ToBytes for String {
-//     fn to_bytes(&self) -> &[u8] {
-//         self.as_bytes()
-//     }
-// }
-
-// impl ToBytes for &[u8] {
-//     fn to_bytes(&self) -> &[u8] {
-//         self
-//     }
-// }
-
-// pub trait HashFunction {
-//     fn update<T: ToBytes + ?Sized>(&mut self, data: &T);
-//     fn finalize(&self) -> &[u8];
-// }
-
-// impl HashFunction for Sha256 {
-//     fn update<T: ToBytes + ?Sized>(&mut self, data: &T) {
-//         self.update(data.to_bytes());
-//     }
-
-//     fn finalize(&self) -> &[u8] {
-//         self.clone().finalize().as_slice()
-//     }
-// }
-
-// impl HashFunction for Sha3_256 {
-//     fn update<T: ToBytes + ?Sized>(&mut self, data: &T) {
-//         self.update(data.to_bytes());
-//     }
-
-//     fn finalize(&self) -> &[u8] {
-//         self.clone().finalize().as_slice()
-//     }
-// }
-
-// pub fn generate_hash<'a, H, Args>(
-//     mut hasher: H,
-//     values: Args,
-// ) -> Result<Scalar, &'static str>
-// where
-//     H: HashFunction,
-//     Args: AsRef<[&'a (dyn ToBytes + 'a)]>,
-// {
-//     for value in values.as_ref() {
-//         // hasher.update(value);
-//         match value {
-//             Value::U16(val) => hasher.update(val),
-//             Value::Str(val) => hasher.update(val),
-//             // Add more cases for other types as needed
-//         }
-//     }
-
-//     let result = hasher.finalize();
-
-//     let a: [u8; 32] = result
-//         .as_slice()
-//         .try_into()
-//         .expect("Error in generating commitment!");
-
-//     Ok(Scalar::from_bytes_mod_order(a))
-// }
-
+/// `/src/algo/hash.rs` implements a generic `generate_hash(hasher, components)`
+/// to fullfil the role of the following 3 seperate hash-associted functions
+/// in Sparkle, i.e., `generate_dkg_challenge` in KeyGen,
+/// and `generate_hash_commitment` & `generate_hash_signing` in Sign.
+///
+/// Remind that, due to some technical issues, `generate_hash()` adopts
+/// `Sha3_256` and `Keccak256` as two hash choices rather than
+/// `sha2::Sha256` and `Sha3_256` in the following 3 functions
 pub fn generate_dkg_challenge(
     index: &u16,
     context: &str,
     public: &RistrettoPoint,
     commitment: &RistrettoPoint,
-) -> Result<Scalar, &'static str> {
+) -> Outcome<Scalar> {
     let mut hasher = Sha256::new();
     // the order of the below may change to allow for EdDSA verification compatibility
     hasher.update(commitment.compress().to_bytes());
@@ -173,10 +33,10 @@ pub fn generate_dkg_challenge(
     hasher.update(context);
     let result = hasher.finalize();
 
-    let a: [u8; 32] = result
-        .as_slice()
-        .try_into()
-        .expect("Error generating commitment!");
+    let a: [u8; 32] = result.as_slice().try_into().catch(
+        exn::HashException,
+        "Failed to generate challenge for KeyGen",
+    )?;
 
     Ok(Scalar::from_bytes_mod_order(a))
 }
@@ -185,20 +45,19 @@ pub fn generate_hash_commitment(
     msg: &[u8],
     signers: &Vec<u16>,
     &group_nonce: &RistrettoPoint,
-) -> Result<Scalar, &'static str> {
+) -> Outcome<Scalar> {
     let mut hasher = Sha256::new();
     // the order of the below may change to allow for EdDSA verification compatibility
     let string_result = String::from_utf16_lossy(signers);
     hasher.update(msg);
-    // hasher.update(&signers.iter().flat_map(|&x| vec![(x >> 8) as u8, (x & 0xFF) as u8]).collect::<u8>());
     hasher.update(string_result);
     hasher.update(group_nonce.compress().to_bytes());
     let result = hasher.finalize();
 
-    let a: [u8; 32] = result
-        .as_slice()
-        .try_into()
-        .expect("Error generating commitment!");
+    let a: [u8; 32] = result.as_slice().try_into().catch(
+        exn::HashException,
+        "Failed to generate hash for commitments",
+    )?;
 
     Ok(Scalar::from_bytes_mod_order(a))
 }
@@ -207,7 +66,7 @@ pub fn generate_hash_signing(
     msg: &[u8],
     group_public: &RistrettoPoint,
     &group_nonce: &RistrettoPoint,
-) -> Result<Scalar, &'static str> {
+) -> Outcome<Scalar> {
     let mut hasher = Sha3_256::new();
     // the order of the below may change to allow for EdDSA verification compatibility
     hasher.update(group_public.compress().to_bytes());
@@ -218,7 +77,7 @@ pub fn generate_hash_signing(
     let a: [u8; 32] = result
         .as_slice()
         .try_into()
-        .expect("Error generating commitment!");
+        .catch(exn::HashException, "Failed to generate hash for signing")?;
 
     Ok(Scalar::from_bytes_mod_order(a))
 }
@@ -255,14 +114,6 @@ pub struct PartyKey {
     pub g_u_i: RistrettoPoint,
 }
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct SigningKey {
-    pub index: u16,
-    pub x_i: Scalar,
-    pub g_x_i: RistrettoPoint,
-    pub group_public: RistrettoPoint,
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeyGenZKP {
     pub g_k_i: RistrettoPoint, // KeyGen: g_k_i
@@ -273,6 +124,14 @@ pub struct KeyGenZKP {
 pub struct Nonce {
     secret: Scalar,
     pub public: RistrettoPoint,
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct SigningKey {
+    pub index: u16,
+    pub x_i: Scalar,
+    pub g_x_i: RistrettoPoint,
+    pub group_public: RistrettoPoint,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -308,16 +167,16 @@ impl Zeroize for KeyGenProposedCommitment {
     }
 }
 
-impl Zeroize for SharesCommitment {
-    fn zeroize(&mut self) {
-        self.commitment.iter_mut().for_each(Zeroize::zeroize);
-    }
-}
-
 impl Zeroize for KeyGenZKP {
     fn zeroize(&mut self) {
         self.g_k_i.zeroize();
         self.sigma_i.zeroize();
+    }
+}
+
+impl Zeroize for SharesCommitment {
+    fn zeroize(&mut self) {
+        self.commitment.iter_mut().for_each(Zeroize::zeroize);
     }
 }
 
@@ -330,12 +189,16 @@ impl Zeroize for Share {
 }
 
 impl KeyGenProposedCommitment {
-    pub fn is_valid_zkp(&self, challenge: Scalar) -> Result<(), &'static str> {
+    pub fn is_valid_zkp(&self, challenge: Scalar) -> Outcome<()> {
         if self.zkp.g_k_i
             != (&constants::RISTRETTO_BASEPOINT_TABLE * &self.zkp.sigma_i)
                 - (self.get_commitment_to_secret() * challenge)
         {
-            return Err("Signature is invalid");
+            throw!(
+                name = exn::SignatureException,
+                ctx =
+                    &format!("Proof of knowledge (Schnorr signature) to the key share is invalid")
+            );
         }
 
         Ok(())
@@ -360,7 +223,7 @@ impl Share {
     }
 
     /// Verify that a share is consistent with a commitment.
-    fn verify_share(&self, com: &SharesCommitment) -> Result<(), &'static str> {
+    fn verify_share(&self, com: &SharesCommitment) -> Outcome<()> {
         let f_result = &constants::RISTRETTO_BASEPOINT_TABLE * &self.value;
 
         let term = Scalar::from(self.receiver_index);
@@ -378,7 +241,10 @@ impl Share {
         }
 
         if !(f_result == result) {
-            return Err("Share is invalid.");
+            throw!(
+                name = exn::CommitmentException,
+                ctx = &format!("Commitment to the key share is invalid")
+            );
         }
 
         Ok(())
@@ -406,15 +272,15 @@ impl PartyKey {
         numshares: u16,
         threshold: u16,
         rng: &mut R,
-    ) -> Result<(SharesCommitment, Vec<Share>), &'static str> {
-        if threshold < 1 {
-            return Err("Threshold cannot be 0");
-        }
-        if numshares < 1 {
-            return Err("Number of shares cannot be 0");
-        }
-        if threshold > numshares {
-            return Err("Threshold cannot exceed numshares");
+    ) -> Outcome<(SharesCommitment, Vec<Share>)> {
+        if threshold < 1 || numshares < 1 || threshold > numshares {
+            throw!(
+                name = exn::ConfigException,
+                ctx = &format!(
+                    "Threshold or the number of shares cannot be 0,\t\nthreshold cannot exceed the number of shares,\t\nwhile threshold={} and number of shares={} are given",
+                    threshold, numshares,
+                )
+            );
         }
 
         let numcoeffs = threshold;
@@ -459,10 +325,9 @@ impl PartyKey {
         &self,
         context: &str,
         rng: &mut R,
-    ) -> Result<KeyGenZKP, &'static str> {
+    ) -> Outcome<KeyGenZKP> {
         let k_i = Scalar::random(rng);
         let g_k_i = &constants::RISTRETTO_BASEPOINT_TABLE * &k_i;
-        // let challenge = generate_dkg_challenge(self.index, context, &self.g_u_i, &g_k)?;
         let challenge = generate_dkg_challenge(&self.index, context, &self.g_u_i, &g_k_i)?;
         let sigma_i = k_i + &self.u_i * challenge;
         Ok(KeyGenZKP { g_k_i, sigma_i })
@@ -478,7 +343,7 @@ impl PartyKey {
     pub fn keygen_receive_commitments_and_validate_peers(
         peer_commitments: Vec<KeyGenProposedCommitment>,
         context: &str,
-    ) -> Result<(Vec<u16>, Vec<KeyGenCommitment>), &'static str> {
+    ) -> Outcome<(Vec<u16>, Vec<KeyGenCommitment>)> {
         let mut invalid_peer_ids = Vec::new();
         let mut valid_peer_commitments: Vec<KeyGenCommitment> =
             Vec::with_capacity(peer_commitments.len());
@@ -508,13 +373,16 @@ impl PartyKey {
         party_shares: Vec<Share>,
         shares_com_vec: Vec<KeyGenCommitment>,
         index: u16,
-    ) -> Result<SigningKey, &'static str> {
+    ) -> Outcome<SigningKey> {
         // first, verify the integrity of the shares
         for share in &party_shares {
             let commitment = shares_com_vec
                 .iter()
                 .find(|comm| comm.index == share.generator_index)
-                .ok_or("Received share with no corresponding commitment")?;
+                .if_none(
+                    exn::CommitmentException,
+                    "Received key share has no corresponding commitment",
+                )?;
             share.verify_share(&commitment.shares_commitment)?;
         }
 
@@ -545,7 +413,7 @@ impl SigningKey {
         rng: &mut R,
         msg: &[u8],
         signers: &Vec<u16>,
-    ) -> Result<(Nonce, Scalar, RistrettoPoint), &'static str> {
+    ) -> Outcome<(Nonce, Scalar, RistrettoPoint)> {
         let nonce = Nonce::new(rng)?;
         let com = generate_hash_commitment(msg, signers, &nonce.public)?;
         Ok((nonce, com, nonce.public.clone()))
@@ -560,10 +428,15 @@ impl SigningKey {
         com_vec: &Vec<Scalar>,
         decom_vec: &Vec<RistrettoPoint>,
         nonce: &Nonce,
-    ) -> Result<SigningResponse, &'static str> {
+    ) -> Outcome<SigningResponse> {
         for (com_i, decom_i) in zip(com_vec, decom_vec) {
             let com = generate_hash_commitment(msg, signers, decom_i)?;
-            assert_eq!(com, *com_i);
+            if com != *com_i {
+                throw!(
+                    name = exn::CommitmentException,
+                    ctx = &format!("Commitment to the local nonce is invalid")
+                );
+            }
         }
         let group_nonce = decom_vec.iter().sum();
         let c = generate_hash_signing(msg, &self.group_public, &group_nonce)?;
@@ -590,50 +463,34 @@ impl SigningKey {
         signing_decommitments: &Vec<RistrettoPoint>,
         signing_responses: &Vec<SigningResponse>,
         signer_pubkeys: &HashMap<u16, RistrettoPoint>,
-    ) -> Result<Signature, &'static str> {
+    ) -> Outcome<Signature> {
         if signing_decommitments.len() != signing_responses.len() {
-            return Err("Mismatched number of commitments and responses");
+            throw!(
+                name = exn::AggregationException,
+                ctx = &format!("Mismatched number of commitments and responses")
+            );
         }
-        // // first, make sure that each decommitment corresponds to exactly one response
-        // let mut decommitment_indices = signing_decommitments
-        //     .iter()
-        //     .map(|decom| decom.index)
-        //     .collect::<Vec<u16>>();
-        // let mut response_indices = signing_responses
-        //     .iter()
-        //     .map(|resp| resp.index)
-        //     .collect::<Vec<u16>>();
-
-        // decommitment_indices.sort();
-        // response_indices.sort();
-
-        // if decommitment_indices != response_indices {
-        //     return Err("Mismatched commitment without corresponding response");
-        // }
-
         let group_nonce = signing_decommitments.iter().sum();
         let challenge = generate_hash_signing(msg, &self.group_public, &group_nonce)?;
 
         // check the validity of each participant's response
         for resp in signing_responses {
-            // let indices = signing_decommitments
-            //     .iter()
-            //     .map(|item| item.index)
-            //     .collect::<Vec<_>>();
-
             let lambda_i = get_lagrange_coeff(0, resp.index, signers)?;
 
             let decom_pos = signers.iter().position(|&x| x == resp.index).unwrap();
             let decom_i = signing_decommitments[decom_pos];
-            // .find(|x| x.index == resp.index)
-            // .ok_or("No matching commitment for response")?;
-
-            let signer_pubkey = signer_pubkeys
-                .get(&resp.index)
-                .ok_or("commitment does not have a matching signer public key!")?;
-
+            let signer_pubkey = signer_pubkeys.get(&resp.index).if_none(
+                exn::CommitmentException,
+                "Commitment does not have a matching signer public key",
+            )?;
             if !resp.is_valid(&signer_pubkey, lambda_i, &decom_i, challenge) {
-                return Err("Invalid signer response");
+                throw!(
+                    name = exn::SignatureException,
+                    ctx = &format!(
+                        "Response from party_id={} is an invalid signature",
+                        &resp.index,
+                    )
+                );
             }
         }
 
@@ -663,13 +520,32 @@ impl SigningResponse {
 }
 
 impl Nonce {
-    pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> Result<Nonce, &'static str> {
+    pub fn new<R: RngCore + CryptoRng>(rng: &mut R) -> Outcome<Nonce> {
         let secret = Scalar::random(rng);
         let public = &constants::RISTRETTO_BASEPOINT_TABLE * &secret;
         if public == RistrettoPoint::identity() {
-            return Err("Invalid nonce commitment");
+            throw!(
+                name = exn::CommitmentException,
+                ctx = &format!("Invalid nonce commitment")
+            );
         }
         Ok(Nonce { secret, public })
+    }
+}
+
+impl Signature {
+    /// validate performs a plain Schnorr validation operation; this is identical
+    /// to performing validation of a Schnorr signature that has been signed by a
+    /// single party.
+    pub fn validate(&self, pubkey: &RistrettoPoint) -> Outcome<()> {
+        let challenge = generate_hash_signing(&self.hash, pubkey, &self.r)?;
+        if self.r != (&constants::RISTRETTO_BASEPOINT_TABLE * &self.z) - (pubkey * challenge) {
+            throw!(
+                name = exn::SignatureException,
+                ctx = &format!("Aggregated signature is invalid")
+            );
+        }
+        Ok(())
     }
 }
 
@@ -680,7 +556,7 @@ pub fn get_lagrange_coeff(
     x_coord: u16,
     signer_index: u16,
     all_signer_indices: &[u16],
-) -> Result<Scalar, &'static str> {
+) -> Outcome<Scalar> {
     let mut num = Scalar::one();
     let mut den = Scalar::one();
     for j in all_signer_indices {
@@ -692,7 +568,10 @@ pub fn get_lagrange_coeff(
     }
 
     if den == Scalar::zero() {
-        return Err("Duplicate shares provided");
+        throw!(
+            name = exn::ConfigException,
+            ctx = &format!("Duplicate key shares provided")
+        );
     }
 
     let lagrange_coeff = num * den.invert();
@@ -700,7 +579,7 @@ pub fn get_lagrange_coeff(
     Ok(lagrange_coeff)
 }
 
-// get g_x_i locally
+/// get g_x_i locally
 pub fn get_ith_pubkey(index: u16, commitments: &Vec<KeyGenCommitment>) -> RistrettoPoint {
     let mut ith_pubkey = RistrettoPoint::identity();
     let term = Scalar::from(index);
@@ -729,23 +608,4 @@ pub fn get_ith_pubkey(index: u16, commitments: &Vec<KeyGenCommitment>) -> Ristre
     }
 
     ith_pubkey
-}
-
-/// to be reviewed again? For H(m, R) instead of H(R, Y, m)??? Classic Schnorr?
-/// *******************************
-/// generates the challenge value H(m, R) used for both signing and verification.
-/// ed25519_ph hashes the message first, and derives the challenge as H(H(m), R),
-/// this would be a better optimization but incompatibility with other
-/// implementations may be undesirable
-
-/// validate performs a plain Schnorr validation operation; this is identical
-/// to performing validation of a Schnorr signature that has been signed by a
-/// single party.
-pub fn validate(sig: &Signature, pubkey: &RistrettoPoint) -> Result<(), &'static str> {
-    let challenge = generate_hash_signing(&sig.hash, pubkey, &sig.r)?;
-    if sig.r != (&constants::RISTRETTO_BASEPOINT_TABLE * &sig.z) - (pubkey * challenge) {
-        return Err("Signature is invalid");
-    }
-
-    Ok(())
 }

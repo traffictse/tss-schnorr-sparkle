@@ -6,9 +6,6 @@ edition = "2021"
 [dependencies.luban_core]
 path = "../luban_core"
 
-[dependencies.bip32]
-path = "deps/bip32-Ed25519-0.5.1"
-
 [dependencies.xuanmi_base_support]
 git = "https://github.com/taiyi-research-institute/xuanmi_base_support"
 rev = "731cb963ba00cbc1adf26645eae8a92f3733c76b"

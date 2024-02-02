@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use xuanmi_base_support::*;
 
+use crate::exn;
 use crate::{KeyGenCommitment, PartyKey, SharesCommitment, SigningKey};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,19 +16,19 @@ pub struct KeyStore {
 impl KeyStore {
     pub fn to_json(&self) -> Outcome<String> {
         let ser = serialize_friendly::KeyStore::serialize(self);
-        let json = serde_json::to_string(&ser).catch("ObjectToJsonException", "")?;
+        let json = serde_json::to_string(&ser).catch(exn::ObjectToJsonException, "")?;
         Ok(json)
     }
 
     pub fn to_json_pretty(&self) -> Outcome<String> {
         let ser = serialize_friendly::KeyStore::serialize(self);
-        let json = serde_json::to_string_pretty(&ser).catch("ObjectToJsonException", "")?;
+        let json = serde_json::to_string_pretty(&ser).catch(exn::ObjectToJsonException, "")?;
         Ok(json)
     }
 
     pub fn from_json(json: &str) -> Outcome<Self> {
         let ser: serialize_friendly::KeyStore =
-            serde_json::from_str(json).catch("JsonToObjectException", "")?;
+            serde_json::from_str(json).catch(exn::JsonToObjectException, "")?;
         let obj: KeyStore = ser.deserialize()?;
         Ok(obj)
     }

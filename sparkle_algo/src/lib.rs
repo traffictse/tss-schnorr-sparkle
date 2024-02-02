@@ -4,17 +4,3 @@ mod algo;
 pub use algo::*;
 mod exceptions;
 pub use exceptions::exception_names as exn;
-
-const SignUpFailed: &str = "SignUpFailed";
-const InvalidMessage: &str = "InvalidMessage";
-const InvalidConfigs: &str = "InvalidConfigs";
-const InvalidKeystore: &str = "InvalidKeystore";
-const InvalidSignature: &str = "InvalidSignature";
-const InvalidKeyGenZKP: &str = "InvalidKeyGenZKP";
-const InvalidCommitment: &str = "InvalidCommitment";
-const SharesGenFailed: &str = "SharesGenFailed";
-const KeyGenPoKGenFailed: &str = "KeyGenPoKGenFailed";
-const SignFailed: &str = "SignFailed";
-const SignatureAggregateFailed: &str = "SignatureAggregateFailed";
-const SigningComGenFailed: &str = "SigningComGenFailed";
-const DKGChallengeGenFailed: &str = "DKGChallengeGenFailed";

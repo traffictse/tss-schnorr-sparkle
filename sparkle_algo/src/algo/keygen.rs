@@ -1,23 +1,16 @@
 #![allow(non_snake_case)]
 
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
+use luban_core::*;
 use rand::rngs::OsRng;
+use xuanmi_base_support::*;
 use zeroize::Zeroize;
 
-use luban_core::*;
-use xuanmi_base_support::*;
-
-use super::party_i::{
-    KeyGenCommitment, KeyGenProposedCommitment, PartyKey, Share, SigningKey,
-};
-
-use crate::algo::data_structure::KeyStore;
-use crate::{
-    DKGChallengeGenFailed, InvalidCommitment, InvalidConfigs, InvalidKeyGenZKP, KeyGenPoKGenFailed,
-    SharesGenFailed, SignUpFailed,
-};
-
 use super::aes;
+use super::party_i::{KeyGenCommitment, KeyGenProposedCommitment, PartyKey, Share, SigningKey};
+use crate::algo::data_structure::KeyStore;
+use crate::exn;
+
 type KeygenT = KeyStore; // keystore_json
 
 pub fn algo_keygen(
@@ -34,7 +27,7 @@ pub fn algo_keygen(
     );
     if threshold >= share_count {
         throw!(
-            name = InvalidConfigs,
+            name = exn::ConfigException,
             ctx = &format!(
                 "t/n config should satisfy t<n.\n\tHowever, {}/{} were provided",
                 threshold, share_count,
@@ -46,7 +39,7 @@ pub fn algo_keygen(
     let messenger =
         MpcClientMessenger::signup(server, "keygen", tr_uuid, threshold, parties, share_count)
             .catch(
-                SignUpFailed,
+                exn::SignUpException,
                 &format!(
                     "Cannot sign up for key geneation with server={}, tr_uuid={}.",
                     server, tr_uuid
@@ -60,11 +53,6 @@ pub fn algo_keygen(
         messenger.uuid()
     );
     let mut round: u16 = 1;
-    let exception_location = &format!(
-        " (at party_id={}, tr_uuid={}).",
-        party_num_int,
-        messenger.uuid()
-    );
     // #endregion
 
     // #region generate commitment and zkp for broadcasting
@@ -73,16 +61,15 @@ pub fn algo_keygen(
     let (shares_com, mut shares) = match party_key.generate_shares(parties, threshold, &mut rng) {
         Ok(_ok) => _ok,
         Err(err) => throw!(
-            name = SharesGenFailed,
-            ctx = &(format!("Failed to generate key shares, particularly \"{}\"", err)
-                + exception_location)
+            name = exn::ConfigException,
+            ctx = &(format!("Failed to generate key shares, particularly \"{}\"", err))
         ),
     };
     let zkp = match party_key.keygen_generate_zkp(context, &mut rng) {
         Ok(_ok) => _ok,
         Err(_) => throw!(
-            name = KeyGenPoKGenFailed,
-            ctx = &(("Failed to generate proof of knowledge").to_owned() + exception_location)
+            name = exn::SignatureException,
+            ctx = &format!("Failed to generate proof of knowledge to the key share")
         ),
     };
 
@@ -111,15 +98,17 @@ pub fn algo_keygen(
         {
             Ok(_ok) => _ok,
             Err(_) => throw!(
-                name = DKGChallengeGenFailed,
-                ctx = &(("Failed to generate DKG challenge").to_owned() + exception_location)
+                name = exn::HashException,
+                ctx = &format!("Failed to generate challenge for KeyGen")
             ),
         };
     if invalid_peer_ids.len() > 0 {
         throw!(
-            name = InvalidKeyGenZKP,
-            ctx =
-                &(format!("Invalid zkp from parties {:?}", invalid_peer_ids) + exception_location)
+            name = exn::SignatureException,
+            ctx = &format!(
+                "Invalid zkp to key shares from party_ids={:?}",
+                invalid_peer_ids
+            )
         );
     }
     dkg_com_vec.iter_mut().for_each(|x| x.zeroize());
@@ -176,8 +165,8 @@ pub fn algo_keygen(
     ) {
         Ok(_ok) => _ok,
         Err(_) => throw!(
-            name = InvalidCommitment,
-            ctx = &(("Invalid commitment to key share").to_owned() + exception_location)
+            name = exn::CommitmentException,
+            ctx = &format!("Invalid commitment to key share")
         ),
     };
     party_shares.iter_mut().for_each(|x| x.zeroize());

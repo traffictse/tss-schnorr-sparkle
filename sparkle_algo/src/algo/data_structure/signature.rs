@@ -47,7 +47,7 @@ impl Signature {
 
 #[derive(Clone, Serialize, Deserialize)]
 struct SignatureSerde {
-    r: String,    // RistrettoPoint-hex:blabla
-    z: String,    // Scalar-hex:blabla
-    hash: String, // bytes-hex:blabla
+    r: String,    // RistrettoPoint-hex:blahblah
+    z: String,    // Scalar-hex:blahblah
+    hash: String, // bytes-hex:blahblah
 }

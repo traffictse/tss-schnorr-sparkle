@@ -1,6 +1,7 @@
 mod keystore;
 pub use keystore::*;
 mod signature;
+use crate::exn;
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
@@ -15,12 +16,12 @@ const POINT_HEX: &'static str = "point_hex:";
 pub fn bytes_from_hex(hex: &str) -> Outcome<Vec<u8>> {
     const ERR_BYTES: &'static str = "Hex string of bytes should begin with \"bytes_hex\"";
     if hex.len() < BYTES_HEX.len() {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_BYTES);
+        throw!(name = exn::PrefixException, ctx = ERR_BYTES);
     }
     if &hex[..BYTES_HEX.len()] != BYTES_HEX {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_BYTES);
+        throw!(name = exn::PrefixException, ctx = ERR_BYTES);
     }
-    hex::decode(&hex[BYTES_HEX.len()..]).catch("HexToBytesException", "")
+    hex::decode(&hex[BYTES_HEX.len()..]).catch(exn::HexToException, "")
 }
 
 pub fn bytes_to_hex(bytes: &[u8]) -> String {
@@ -32,10 +33,10 @@ pub fn bytes_to_hex(bytes: &[u8]) -> String {
 pub fn scalar_from_hex(hex: &str) -> Outcome<Scalar> {
     const ERR_SCALAR: &'static str = "Hex string of bytes should begin with \"bytes_hex\"";
     if hex.len() < SCALAR_HEX.len() {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_SCALAR);
+        throw!(name = exn::PrefixException, ctx = ERR_SCALAR);
     }
     if &hex[..SCALAR_HEX.len()] != SCALAR_HEX {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_SCALAR);
+        throw!(name = exn::PrefixException, ctx = ERR_SCALAR);
     }
     let bytes = bytes_from_hex(&hex[SCALAR_HEX.len()..])?;
     let bytes: [u8; 32] = bytes.try_into().unwrap();
@@ -51,14 +52,14 @@ pub fn scalar_to_hex(scalar: &Scalar) -> String {
 pub fn point_from_hex(hex: &str) -> Outcome<RistrettoPoint> {
     const ERR_POINT: &'static str = "Hex string of bytes should begin with \"bytes_hex\"";
     if hex.len() < POINT_HEX.len() {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_POINT);
+        throw!(name = exn::PrefixException, ctx = ERR_POINT);
     }
     if &hex[..POINT_HEX.len()] != POINT_HEX {
-        throw!(name = "IncorrectPrefixError", ctx = ERR_POINT);
+        throw!(name = exn::PrefixException, ctx = ERR_POINT);
     }
     CompressedRistretto::from_slice(&bytes_from_hex(&hex[POINT_HEX.len()..])?)
         .decompress()
-        .if_none("HexToPointException", "")
+        .if_none(exn::HexToException, "")
 }
 
 pub fn point_to_hex(point: &RistrettoPoint) -> String {

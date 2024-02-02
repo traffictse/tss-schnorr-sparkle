@@ -7,5 +7,17 @@ macro_rules! register_exception_names {
 }
 
 pub mod exception_names {
-    register_exception_names!(AesGcmException);
+    register_exception_names!(
+        AesGcmException,
+        AggregationException,
+        CommitmentException,
+        ConfigException,
+        HashException,
+        HexToException,
+        JsonToObjectException,
+        ObjectToJsonException,
+        PrefixException,
+        SignatureException,
+        SignUpException
+    );
 }
